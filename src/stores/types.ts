@@ -121,6 +121,10 @@ export interface AppState {
   saveDraw: boolean;
   setSaveDraw: (enabled: boolean) => void;
 
+  /** 流水线节点详细日志（落盘） */
+  verbosePipelineLog: boolean;
+  setVerbosePipelineLog: (enabled: boolean) => void;
+
   // Interface 数据
   projectInterface: ProjectInterface | null;
   interfaceTranslations: Record<string, Record<string, string>>;

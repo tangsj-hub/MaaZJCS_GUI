@@ -130,6 +130,8 @@ export interface AppSettings {
   rightPanelCollapsed?: boolean; // 右侧面板是否折叠
   addTaskPanelHeight?: number; // 添加任务面板高度
   devMode?: boolean; // 开发模式，启用后允许 F5 刷新 UI
+  /** 在任务日志中输出流水线节点（识别/动作/next 列表）详情，便于排查卡住位置 */
+  verbosePipelineLog?: boolean;
   onboardingCompleted?: boolean; // 新用户引导是否已完成
   hotkeys?: HotkeySettings; // 快捷键设置
   tcpCompatMode?: boolean; // 通信兼容模式，强制使用 TCP 而非 IPC

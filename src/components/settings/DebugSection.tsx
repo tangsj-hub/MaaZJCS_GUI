@@ -17,6 +17,8 @@ export function DebugSection() {
     dataPath,
     devMode,
     setDevMode,
+    verbosePipelineLog,
+    setVerbosePipelineLog,
     saveDraw,
     setSaveDraw,
     tcpCompatMode,
@@ -249,6 +251,17 @@ export function DebugSection() {
             </div>
           </div>
           <SwitchButton value={devMode} onChange={(v) => setDevMode(v)} />
+        </div>
+
+        <div className="flex items-center justify-between pt-4 border-t border-border">
+          <div className="flex items-center gap-3">
+            <ScrollText className="w-5 h-5 text-accent" />
+            <div>
+              <span className="font-medium text-text-primary">{t('debug.verbosePipelineLog')}</span>
+              <p className="text-xs text-text-muted mt-0.5">{t('debug.verbosePipelineLogHint')}</p>
+            </div>
+          </div>
+          <SwitchButton value={verbosePipelineLog} onChange={(v) => setVerbosePipelineLog(v)} />
         </div>
 
         {/* 保存调试图像 */}

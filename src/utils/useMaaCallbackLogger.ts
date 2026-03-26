@@ -138,6 +138,60 @@ function isConnectAction(details: MaaCallbackDetails): boolean {
   return details.action === 'Connect' || details.action === 'connect';
 }
 
+const PIPELINE_VERBOSE_MAX_JSON = 900;
+
+function formatNextListPreview(list: unknown): string | undefined {
+  if (!Array.isArray(list)) return undefined;
+  const names = list.map((item) => {
+    if (item && typeof item === 'object' && 'name' in item) {
+      const n = (item as { name: unknown }).name;
+      return typeof n === 'string' ? n : JSON.stringify(item);
+    }
+    return JSON.stringify(item);
+  });
+  return names.length ? names.join(' → ') : undefined;
+}
+
+/** 将 Maa 流水线节点回调整理为一行可读日志（用于排查卡住位置） */
+function formatPipelineVerboseLine(
+  message: string,
+  details: MaaCallbackDetails & Record<string, unknown>,
+): string {
+  const parts: string[] = [`[流水线] ${message}`];
+  if (typeof details.name === 'string') parts.push(`@${details.name}`);
+  if (details.task_id !== undefined) parts.push(`task_id=${String(details.task_id)}`);
+
+  const listPreview = formatNextListPreview(details.list);
+  if (listPreview) parts.push(`next=[${listPreview}]`);
+
+  const nodeDetails = details.node_details as Record<string, unknown> | undefined;
+  if (nodeDetails && typeof nodeDetails.name === 'string') {
+    parts.push(`命中=${nodeDetails.name}`);
+  }
+
+  const actionDetails = details.action_details as Record<string, unknown> | undefined;
+  if (actionDetails && typeof actionDetails.action === 'string') {
+    parts.push(`动作=${actionDetails.action}`);
+  }
+
+  let line = parts.join(' ');
+  try {
+    const json = JSON.stringify(details);
+    if (json.length > PIPELINE_VERBOSE_MAX_JSON) {
+      line += ` | ${json.slice(0, PIPELINE_VERBOSE_MAX_JSON)}…`;
+    } else if (json !== '{}') {
+      line += ` | ${json}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return line;
+}
+
+function shouldLogVerbosePipeline(): boolean {
+  return useAppStore.getState().verbosePipelineLog;
+}
+
 // 从当前实例配置推断控制器类型和名称（用于解决回调时序问题）
 function inferCtrlInfoFromInstance(instanceId: string): {
   type: 'device' | 'window' | undefined;
@@ -516,8 +570,8 @@ function handleCallback(
       break;
     }
 
-    // ==================== 节点消息（仅在有 focus 时显示，否则忽略）====================
-    // 这些消息只有在 focus 配置时才显示，上面已经处理过了
+    // ==================== 节点消息 ====================
+    // 默认仅在有 focus 配置时由上方分支显示；开启「流水线详细日志」后写入任务日志
     case 'Node.Recognition.Starting':
     case 'Node.Recognition.Succeeded':
     case 'Node.Recognition.Failed':
@@ -530,7 +584,15 @@ function handleCallback(
     case 'Node.NextList.Starting':
     case 'Node.NextList.Succeeded':
     case 'Node.NextList.Failed':
-      // 没有 focus 配置时不显示这些消息
+    case 'Node.RecognitionNode.Starting':
+    case 'Node.RecognitionNode.Succeeded':
+    case 'Node.RecognitionNode.Failed':
+      if (shouldLogVerbosePipeline()) {
+        addLog(instanceId, {
+          type: 'info',
+          message: formatPipelineVerboseLine(message, details),
+        });
+      }
       break;
 
     default:

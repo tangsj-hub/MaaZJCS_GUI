@@ -511,6 +511,9 @@ export default {
     exportLogsFailed: 'Failed to export logs',
     devMode: 'Developer Mode',
     devModeHint: 'Allow pressing F5 to refresh UI when enabled',
+    verbosePipelineLog: 'Verbose pipeline logs',
+    verbosePipelineLogHint:
+      'Log recognition/action/next-list node callbacks (with JSON summary) to the task log for debugging stalls',
     saveDraw: 'Save Debug Images',
     saveDrawHint:
       'Save recognition and action debug images to log directory (auto-disabled on restart)',

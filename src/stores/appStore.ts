@@ -166,6 +166,9 @@ export const useAppStore = create<AppState>()(
     currentPage: 'main',
     setCurrentPage: (page) => set({ currentPage: page }),
 
+    verbosePipelineLog: true,
+    setVerbosePipelineLog: (enabled) => set({ verbosePipelineLog: enabled }),
+
     // 调试选项（不落盘，每次启动默认关闭）
     saveDraw: false,
     setSaveDraw: async (enabled) => {
@@ -1088,6 +1091,7 @@ export const useAppStore = create<AppState>()(
         screenshotFrameRate: config.settings.screenshotFrameRate ?? defaultScreenshotFrameRate,
         welcomeShownHash: config.settings.welcomeShownHash ?? '',
         devMode: config.settings.devMode ?? false,
+        verbosePipelineLog: config.settings.verbosePipelineLog ?? true,
         tcpCompatMode: config.settings.tcpCompatMode ?? false,
         autoStartInstanceId: config.settings.autoStartInstanceId,
         autoRunOnLaunch: config.settings.autoRunOnLaunch ?? false,
@@ -1814,6 +1818,7 @@ function generateConfig(): MxuConfig {
       screenshotFrameRate: state.screenshotFrameRate,
       welcomeShownHash: state.welcomeShownHash,
       devMode: state.devMode,
+      verbosePipelineLog: state.verbosePipelineLog,
       tcpCompatMode: state.tcpCompatMode,
       autoStartInstanceId: state.autoStartInstanceId,
       autoRunOnLaunch: state.autoRunOnLaunch,
@@ -1882,6 +1887,7 @@ useAppStore.subscribe(
     screenshotFrameRate: state.screenshotFrameRate,
     welcomeShownHash: state.welcomeShownHash,
     devMode: state.devMode,
+    verbosePipelineLog: state.verbosePipelineLog,
     tcpCompatMode: state.tcpCompatMode,
     autoStartInstanceId: state.autoStartInstanceId,
     autoRunOnLaunch: state.autoRunOnLaunch,

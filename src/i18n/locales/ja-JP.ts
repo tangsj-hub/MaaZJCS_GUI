@@ -510,6 +510,9 @@ export default {
     exportLogsFailed: 'ログのエクスポートに失敗しました',
     devMode: '開発者モード',
     devModeHint: '有効にすると F5 キーで UI をリフレッシュできます',
+    verbosePipelineLog: 'パイプライン詳細ログ',
+    verbosePipelineLogHint:
+      '認識・アクション・next リストのコールバック（JSON 要約付き）をタスクログに出力し、どのノードで止まったか確認しやすくします',
     saveDraw: 'デバッグ画像を保存',
     saveDrawHint:
       '認識と操作のデバッグ画像をログフォルダに保存します（再起動後は自動的にオフになります）',

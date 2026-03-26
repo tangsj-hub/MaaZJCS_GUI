@@ -500,6 +500,9 @@ export default {
     exportLogsFailed: '导出日志失败',
     devMode: '开发模式',
     devModeHint: '启用后允许按 F5 刷新 UI',
+    verbosePipelineLog: '流水线详细日志',
+    verbosePipelineLogHint:
+      '在任务日志中输出节点识别、动作与 next 列表（含 JSON 摘要），便于查看卡在哪个节点',
     saveDraw: '保存调试图像',
     saveDrawHint: '保存识别和操作的调试图像到日志目录（重启软件后自动关闭）',
     tcpCompatMode: '通信兼容模式',

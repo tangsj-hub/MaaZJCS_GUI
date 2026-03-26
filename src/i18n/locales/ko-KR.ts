@@ -509,6 +509,9 @@ export default {
     exportLogsFailed: '로그 내보내기 실패',
     devMode: '개발자 모드',
     devModeHint: '활성화하면 F5 키로 UI를 새로고침할 수 있습니다',
+    verbosePipelineLog: '파이프라인 상세 로그',
+    verbosePipelineLogHint:
+      '인식/동작/next 목록 콜백(JSON 요약 포함)을 작업 로그에 남겨 어느 노드에서 멈췄는지 확인하기 쉽게 합니다',
     saveDraw: '디버그 이미지 저장',
     saveDrawHint:
       '인식 및 작업의 디버그 이미지를 로그 폴더에 저장합니다 (재시작 후 자동으로 비활성화됨)',
