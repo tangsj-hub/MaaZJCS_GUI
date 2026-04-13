@@ -6,12 +6,170 @@ use super::types::MaaCallbackEvent;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 
+/// 节点名称 → 人性化描述映射表
+/// 格式：(节点名, 描述)
+/// 只在 PipelineNode.Succeeded 时打印（节点实际命中执行）
+/// 不需要覆盖所有节点，未配置的节点静默跳过
+const NODE_LABELS: &[(&str, &str)] = &[
+    // ── 副本对战·准备 ──────────────────────────────
+    ("DungeonTapScreenArea",            "正在开启副本弹窗"),
+    ("DungeonBattlePopupMatchOcr",      "副本弹窗已弹出，开始匹配"),
+    ("DungeonBattlePopupNormalOcr",     "选择普通难度"),
+    ("DungeonBattlePopupHardOcr",       "选择困难难度"),
+    ("DungeonBattlePopupBackIconTmpl",  "副本弹窗：点击返回"),
+    ("DungeonBattlePopupBackOcr",       "副本弹窗：点击返回"),
+    ("DungeonBattleTapMatch",           "点击匹配，等待对局"),
+    ("DungeonBattleTapAcceptOcr",       "接受匹配邀请"),
+    ("DungeonBattleUiReadyOcr",         "识别到准备按钮，进入对局"),
+    ("DungeonBattleWaitEnd",            "对局进行中，等待结束..."),
+    ("DungeonBattleLikeTeam",           "对局结束，正在点赞队友"),
+    ("DungeonBattleClaimRewardOcr",     "领取对战奖励"),
+    ("DungeonBattleTapTopArea",         "点击返回，退出结算页"),
+    ("DungeonBattleMatchLoop",          "匹配轮询中..."),
+
+    // ── 日常副本 ───────────────────────────────────
+    ("DungeonTapHomeFirst",             "进入副本首页"),
+    ("DungeonUiNotesTabSelectedBiji2Tmpl", "副本笔记已选中"),
+    ("DungeonUiNotesTabUnselectedBijiTmpl", "点击副本笔记标签"),
+    ("DungeonUiDailyDungeonOcr",        "点击日常副本"),
+    ("DungeonTapDungeonName",           "选择副本关卡"),
+    ("DungeonSelectDifficulty",         "选择普通难度"),
+    ("DungeonTapMatch",                 "点击匹配"),
+    ("DungeonTapAcceptOcr",             "接受匹配"),
+    ("DungeonUiReadyOcr",               "识别到准备按钮"),
+    ("DungeonUiMatchOcr",               "识别到匹配按钮"),
+    ("DungeonUiBackIconTmpl",           "点击返回"),
+    ("DungeonUiBackOcr",                "点击返回"),
+    ("DungeonRecoverTapHome",           "恢复：回到首页"),
+
+    // ── 海之宫副本 ─────────────────────────────────
+    ("SeaPalaceTapHomeFirst",           "进入海之宫首页"),
+    ("SeaPalaceUiSeaRuinsOcr",          "选择海之宫遗迹"),
+    ("SeaPalaceSelectDifficulty",       "选择普通难度"),
+    ("SeaPalaceTapMatch",               "点击匹配"),
+    ("SeaPalaceTapAcceptOcr",           "接受匹配"),
+    ("SeaPalaceUiReadyOcr",             "识别到准备按钮"),
+
+    // ── 副本对战（队长/队员模式）──────────────────
+    ("DungeonLeaderMode",               "以队长身份进入"),
+    ("DungeonUiStartBattleOcr",         "点击开始战斗"),
+    ("DungeonUiInviteOcr",              "发送邀请"),
+    ("DungeonLeaderWaitLoop",           "等待队员准备..."),
+    ("DungeonMemberMode",               "以队员身份进入"),
+    ("DungeonMemberWaitLoop",           "等待队长开始..."),
+];
+
+/// 根据命中节点名查找人性化描述
+fn node_label(hit_name: &str) -> Option<&'static str> {
+    NODE_LABELS
+        .iter()
+        .find(|(node, _)| *node == hit_name)
+        .map(|(_, label)| *label)
+}
+
+/// 从 details JSON 字符串中提取指定 key 的字符串值（简单解析，避免外部依赖）
+fn extract_str<'a>(details: &'a str, key: &str) -> Option<&'a str> {
+    let pattern = format!("\"{}\":", key);
+    let start = details.find(pattern.as_str())? + pattern.len();
+    let rest = details[start..].trim_start();
+    if rest.starts_with('"') {
+        let inner = &rest[1..];
+        let end = inner.find('"')?;
+        Some(&inner[..end])
+    } else {
+        // 数字等非字符串值，取到 , 或 }
+        let end = rest.find([',', '}'])?;
+        Some(rest[..end].trim())
+    }
+}
+
+/// 从 node_details 对象内提取 name 字段（命中的子节点名）
+fn extract_hit_node(details: &str) -> Option<&str> {
+    let start = details.find("\"node_details\"")?;
+    extract_str(&details[start..], "name")
+}
+
+/// 从 action_details 对象内提取 action 字段
+fn extract_action(details: &str) -> Option<&str> {
+    let start = details.find("\"action_details\"")?;
+    extract_str(&details[start..], "action")
+}
+
+/// 生成终端友好的单行日志
+fn format_callback_log(message: &str, details: &str) -> Option<String> {
+    match message {
+        // ── 控制器 ─────────────────────────────────
+        "Controller.Action.Starting" => Some("正在连接设备 ...".to_string()),
+        "Controller.Action.Succeeded" => Some("设备连接成功".to_string()),
+        "Controller.Action.Failed" => Some("设备连接失败！".to_string()),
+
+        // ── 资源加载 ───────────────────────────────
+        "Resource.Loading.Starting" => {
+            let name = extract_str(details, "path")
+                .and_then(|p| p.rsplit(['/', '\\']).next())
+                .unwrap_or("资源");
+            Some(format!("正在加载资源: {}", name))
+        }
+        "Resource.Loading.Succeeded" => Some("资源加载成功".to_string()),
+        "Resource.Loading.Failed" => {
+            let name = extract_str(details, "path").unwrap_or("未知资源");
+            Some(format!("资源加载失败: {}", name))
+        }
+
+        // ── 任务级别 ───────────────────────────────
+        "Tasker.Task.Starting" => {
+            let entry = extract_str(details, "entry").unwrap_or("未知任务");
+            Some(format!("任务开始: {}", entry))
+        }
+        "Tasker.Task.Succeeded" => {
+            let entry = extract_str(details, "entry").unwrap_or("未知任务");
+            Some(format!("任务完成: {}", entry))
+        }
+        "Tasker.Task.Failed" => {
+            let entry = extract_str(details, "entry").unwrap_or("未知任务");
+            Some(format!("任务失败: {}", entry))
+        }
+
+        // ── 节点级别：只打印有人性化标签的关键节点 ──
+        "Node.PipelineNode.Succeeded" => {
+            let hit = extract_hit_node(details).unwrap_or("");
+            if let Some(label) = node_label(hit) {
+                // 跳过纯轮询节点（避免刷屏）
+                let is_loop = hit.ends_with("Loop") || hit.ends_with("WaitLoop");
+                if !is_loop {
+                    return Some(format!("{}", label));
+                }
+            }
+            None
+        }
+        "Node.PipelineNode.Failed" => {
+            let name = extract_str(details, "name").unwrap_or("");
+            let hit = extract_hit_node(details).unwrap_or("");
+            // 只打印有标签的节点失败，或者动作不是 StopTask 的失败（StopTask 是正常结束）
+            let action = extract_action(details).unwrap_or("");
+            if action == "StopTask" {
+                return None;
+            }
+            if let Some(label) = node_label(hit).or_else(|| node_label(name)) {
+                return Some(format!("⚠ {} 失败", label));
+            }
+            None
+        }
+
+        _ => None,
+    }
+}
+
 /// 发送回调事件到前端
 pub fn emit_callback_event<S: Into<String>>(app: &AppHandle, message: S, details: S) {
-    let event = MaaCallbackEvent {
-        message: message.into(),
-        details: details.into(),
-    };
+    let message = message.into();
+    let details = details.into();
+
+    if let Some(log_line) = format_callback_log(&message, &details) {
+        log::info!("[MAA] {}", log_line);
+    }
+
+    let event = MaaCallbackEvent { message, details };
     if let Err(e) = app.emit("maa-callback", event) {
         log::error!("Failed to emit maa-callback: {}", e);
     }
