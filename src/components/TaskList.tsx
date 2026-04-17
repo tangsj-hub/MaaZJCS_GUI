@@ -165,6 +165,8 @@ export function TaskList() {
         customName: t.customName,
         enabled: t.enabled,
         optionValues: t.optionValues,
+        ...(t.loopCount && t.loopCount > 1 ? { loopCount: t.loopCount } : {}),
+        ...(t.loopDelay && t.loopDelay > 0 ? { loopDelay: t.loopDelay } : {}),
       })),
     };
   }, [instance]);
@@ -260,6 +262,8 @@ export function TaskList() {
       const taskName = String(rt.taskName ?? '');
       if (!taskName) throw new Error('Invalid task');
       const optionValues = (rt.optionValues ?? {}) as Record<string, OptionValue>;
+      const loopCount = rt.loopCount ? Math.max(1, Math.min(Math.round(Number(rt.loopCount)), 999)) : undefined;
+      const loopDelay = rt.loopDelay ? Math.max(0, Math.min(Math.round(Number(rt.loopDelay)), 600000)) : undefined;
       return {
         id: crypto.randomUUID(),
         taskName,
@@ -267,6 +271,8 @@ export function TaskList() {
         enabled: rt.enabled !== false,
         optionValues,
         expanded: false,
+        ...(loopCount && loopCount > 1 ? { loopCount } : {}),
+        ...(loopDelay && loopDelay > 0 ? { loopDelay } : {}),
       } satisfies SelectedTask;
     });
   };

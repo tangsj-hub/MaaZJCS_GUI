@@ -13,6 +13,36 @@ const log = loggers.task;
 
 const taskMonitorControllers = new Map<string, AbortController>();
 
+// 延迟循环任务的增量提交机制
+export interface DeferredIteration {
+  entry: string;
+  pipelineOverride: string;
+  selectedTaskId: string;
+  displayName: string;
+  remaining: number;
+  delayMs: number;
+}
+
+const deferredIterationMap = new Map<number, DeferredIteration>();
+
+export function registerDeferredIteration(maaTaskId: number, info: DeferredIteration) {
+  deferredIterationMap.set(maaTaskId, info);
+  log.info(`[task-delay] 注册延迟迭代: maaTaskId=${maaTaskId}, remaining=${info.remaining}, delay=${info.delayMs}ms`);
+}
+
+export function clearDeferredIterations() {
+  deferredIterationMap.clear();
+}
+
+function sleepAbortable(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new TaskResultWaitAbortedError()); return; }
+    const timer = setTimeout(resolve, ms);
+    const onAbort = () => { clearTimeout(timer); reject(new TaskResultWaitAbortedError()); };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof TaskResultWaitAbortedError;
 }
@@ -100,6 +130,36 @@ async function monitorTaskQueue(instanceId: string, controller: AbortController)
 
     if (result === 'failed') {
       hasFailed = true;
+    }
+
+    // 延迟循环：检查是否有剩余迭代需要提交
+    const deferred = deferredIterationMap.get(taskId);
+    log.info(`[task-delay] 查找延迟迭代: taskId=${taskId}, found=${!!deferred}, mapSize=${deferredIterationMap.size}, mapKeys=[${[...deferredIterationMap.keys()].join(',')}]`);
+    if (deferred && deferred.remaining > 0) {
+      deferredIterationMap.delete(taskId);
+
+      log.info(`[task-monitor#${instanceId}] 任务 ${taskId} 完成，等待 ${deferred.delayMs}ms 后提交下一次迭代 (剩余 ${deferred.remaining})`);
+      useAppStore.getState().addLog(instanceId, { type: 'info', message: `⏳ 循环间隔等待中: ${deferred.delayMs}ms (剩余 ${deferred.remaining} 次)` });
+      await sleepAbortable(deferred.delayMs, controller.signal);
+      if (controller.signal.aborted || taskMonitorControllers.get(instanceId) !== controller) {
+        return;
+      }
+
+      // 提交下一次迭代
+      useAppStore.getState().addLog(instanceId, { type: 'info', message: `⏳ 等待结束，正在提交下一次迭代...` });
+      const newTaskId = await maaService.runTask(instanceId, deferred.entry, deferred.pipelineOverride);
+      log.info(`[task-monitor#${instanceId}] 延迟迭代已提交, newTaskId=${newTaskId}`);
+
+      // 注册映射
+      const st = useAppStore.getState();
+      st.registerMaaTaskMapping(instanceId, newTaskId, deferred.selectedTaskId);
+      st.registerTaskIdName(newTaskId, deferred.displayName);
+      st.appendPendingTaskId(instanceId, newTaskId);
+
+      // 如果还有更多迭代，为新 taskId 注册下一次
+      if (deferred.remaining > 1) {
+        deferredIterationMap.set(newTaskId, { ...deferred, remaining: deferred.remaining - 1 });
+      }
     }
 
     index += 1;

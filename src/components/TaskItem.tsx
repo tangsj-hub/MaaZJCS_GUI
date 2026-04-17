@@ -20,6 +20,7 @@ import {
   FileText,
   Link,
   AlertCircle,
+  Repeat,
 } from 'lucide-react';
 import { useAppStore, type TaskRunStatus } from '@/stores/appStore';
 import { maaService } from '@/services/maaService';
@@ -317,6 +318,9 @@ export function TaskItem({ instanceId, task }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editName, setEditName] = useState('');
+  const [showLoopDialog, setShowLoopDialog] = useState(false);
+  const [loopEditValue, setLoopEditValue] = useState('');
+  const [delayEditValue, setDelayEditValue] = useState('');
 
   const {
     projectInterface,
@@ -325,6 +329,8 @@ export function TaskItem({ instanceId, task }: TaskItemProps) {
     removeTaskFromInstance,
     confirmBeforeDelete,
     renameTask,
+    setTaskLoopCount,
+    setTaskLoopDelay,
     duplicateTask,
     moveTaskUp,
     moveTaskDown,
@@ -693,6 +699,17 @@ export function TaskItem({ instanceId, task }: TaskItemProps) {
             setIsEditing(true);
           },
         },
+        {
+          id: 'loop-count',
+          label: t('contextMenu.setLoopCount'),
+          icon: Repeat,
+          disabled: isInstanceRunning,
+          onClick: () => {
+            setLoopEditValue(String(task.loopCount ?? 1));
+            setDelayEditValue(String(task.loopDelay ?? 0));
+            setShowLoopDialog(true);
+          },
+        },
         { id: 'divider-1', label: '', divider: true },
         {
           id: 'toggle',
@@ -768,6 +785,8 @@ export function TaskItem({ instanceId, task }: TaskItemProps) {
       canExpand,
       getActiveInstance,
       duplicateTask,
+      setTaskLoopCount,
+      setTaskLoopDelay,
       toggleTaskEnabled,
       toggleTaskExpanded,
       moveTaskUp,
@@ -958,6 +977,11 @@ export function TaskItem({ instanceId, task }: TaskItemProps) {
                 {task.customName && (
                   <span className="flex-shrink-0 text-xs text-text-muted">({originalLabel})</span>
                 )}
+                {(task.loopCount ?? 1) > 1 && (
+                  <span className="flex-shrink-0 text-xs font-medium text-accent bg-accent/10 px-1 py-0.5 rounded">
+                    {t('taskItem.loopCountBadge', { count: task.loopCount })}
+                  </span>
+                )}
               </div>
 
               {/* 不带选项的任务：直接显示不兼容警告 */}
@@ -1109,6 +1133,57 @@ export function TaskItem({ instanceId, task }: TaskItemProps) {
           removeTaskFromInstance(instanceId, task.id);
         }}
       />
+
+      {/* 循环次数设置弹窗 */}
+      <ConfirmDialog
+        open={showLoopDialog}
+        title={t('taskItem.loopCountTitle')}
+        message={t('taskItem.loopCountMessage')}
+        cancelText={t('common.cancel')}
+        confirmText={t('common.confirm')}
+        onCancel={() => setShowLoopDialog(false)}
+        onConfirm={() => {
+          const num = parseInt(loopEditValue, 10);
+          if (!isNaN(num) && num >= 1) {
+            setTaskLoopCount(instanceId, task.id, num);
+          }
+          const delay = parseInt(delayEditValue, 10);
+          setTaskLoopDelay(instanceId, task.id, isNaN(delay) ? 0 : delay);
+          setShowLoopDialog(false);
+        }}
+      >
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="block text-xs text-text-secondary mb-1">
+              {t('taskItem.loopCountLabel')}
+              <span className="ml-1 text-text-muted">({t('taskItem.loopCountHint')})</span>
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={999}
+              value={loopEditValue}
+              onChange={(e) => setLoopEditValue(e.target.value)}
+              autoFocus
+              className="w-full px-3 py-2 rounded-lg border border-border bg-bg-primary text-text-primary text-sm outline-none focus:ring-2 focus:ring-accent/50"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-text-secondary mb-1">
+              {t('taskItem.loopDelayLabel')}
+              <span className="ml-1 text-text-muted">({t('taskItem.loopDelayHint')})</span>
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={600000}
+              value={delayEditValue}
+              onChange={(e) => setDelayEditValue(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-bg-primary text-text-primary text-sm outline-none focus:ring-2 focus:ring-accent/50"
+            />
+          </div>
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

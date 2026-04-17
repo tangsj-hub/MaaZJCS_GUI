@@ -39,8 +39,12 @@ export function ConfirmDialog({
 
   useEffect(() => {
     if (!open) return;
-    // initial focus
+    // initial focus — only on open
     cancelBtnRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {

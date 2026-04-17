@@ -208,6 +208,8 @@ export interface SelectedTask {
   enabled: boolean;
   optionValues: Record<string, OptionValue>;
   expanded: boolean;
+  loopCount?: number; // 循环次数，默认 1
+  loopDelay?: number; // 每次循环结束后等待时长（毫秒），默认 0
 }
 
 export type OptionValue =

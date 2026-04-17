@@ -184,6 +184,8 @@ export interface AppState {
   selectAllTasks: (instanceId: string, enabled: boolean) => void;
   collapseAllTasks: (instanceId: string, expanded: boolean) => void;
   renameTask: (instanceId: string, taskId: string, newName: string) => void;
+  setTaskLoopCount: (instanceId: string, taskId: string, count: number) => void;
+  setTaskLoopDelay: (instanceId: string, taskId: string, delay: number) => void;
 
   // 任务右键菜单操作
   duplicateTask: (instanceId: string, taskId: string) => void;

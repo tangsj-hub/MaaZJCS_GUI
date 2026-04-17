@@ -34,7 +34,7 @@ import { normalizeAgentConfigs } from '@/types/interface';
 import { getInterfaceLangKey } from '@/i18n';
 import { getMxuSpecialTask } from '@/types/specialTasks';
 import { startGlobalCallbackListener } from '@/components/connection/callbackCache';
-import { cancelTaskQueueMonitor, startTaskQueueMonitor } from '@/services/taskMonitor';
+import { cancelTaskQueueMonitor, startTaskQueueMonitor, registerDeferredIteration, clearDeferredIterations } from '@/services/taskMonitor';
 import { buildPiEnvVars } from '@/utils/piEnv';
 
 const log = loggers.ui;
@@ -227,8 +227,11 @@ function InstanceCard({ instanceId, instanceName, isActive, onSelect }: Instance
         try {
           log.info(`[${instanceName}] 开始执行任务, 数量:`, enabledTasks.length);
 
-          // 构建任务配置列表
+          // 构建任务配置列表，按 loopCount 展开（有延迟的任务仅提交第一次迭代）
           const taskConfigs: TaskConfig[] = [];
+          const expandedTasks: typeof enabledTasks = [];
+          interface DeferredEntry { index: number; entry: string; pipelineOverride: string; selectedTaskId: string; displayName: string; remaining: number; delayMs: number; }
+          const deferredEntries: DeferredEntry[] = [];
           for (const selectedTask of enabledTasks) {
             // 先检查是否是 MXU 特殊任务
             const specialTask = getMxuSpecialTask(selectedTask.taskName);
@@ -236,16 +239,15 @@ function InstanceCard({ instanceId, instanceName, isActive, onSelect }: Instance
               specialTask?.taskDef ||
               projectInterface?.task.find((t) => t.name === selectedTask.taskName);
             if (!taskDef) continue;
-
-            taskConfigs.push({
-              entry: taskDef.entry,
-              pipeline_override: generateTaskPipelineOverride(
-                selectedTask,
-                projectInterface,
-                currentControllerName,
-                currentResourceName,
-              ),
-            });
+            const loopCount = Math.max(1, Math.min(selectedTask.loopCount ?? 1, 999));
+            const override = generateTaskPipelineOverride(
+              selectedTask,
+              projectInterface,
+              currentControllerName,
+              currentResourceName,
+            );
+            const loopDelay = Math.max(0, selectedTask.loopDelay ?? 0);
+            const hasDelay = loopDelay > 0 && loopCount > 1;
             // MXU 特殊任务的 label 是 MXU i18n key，需要用 t() 翻译
             const taskDisplayName =
               selectedTask.customName ||
@@ -254,6 +256,19 @@ function InstanceCard({ instanceId, instanceName, isActive, onSelect }: Instance
                 : resolveI18nText(taskDef.label, translations)) ||
               selectedTask.taskName;
             registerEntryTaskName(taskDef.entry, taskDisplayName);
+            if (hasDelay) {
+              // 有延迟的循环任务：仅提交第一次迭代，剩余由 taskMonitor 增量提交
+              const idx = taskConfigs.length;
+              taskConfigs.push({ entry: taskDef.entry, pipeline_override: override });
+              expandedTasks.push(selectedTask);
+              deferredEntries.push({ index: idx, entry: taskDef.entry, pipelineOverride: override, selectedTaskId: selectedTask.id, displayName: taskDisplayName, remaining: loopCount - 1, delayMs: loopDelay });
+            } else {
+              // 无延迟：一次性展开所有迭代
+              for (let k = 0; k < loopCount; k++) {
+                taskConfigs.push({ entry: taskDef.entry, pipeline_override: override });
+                expandedTasks.push(selectedTask);
+              }
+            }
           }
 
           if (taskConfigs.length === 0) {
@@ -302,22 +317,31 @@ function InstanceCard({ instanceId, instanceName, isActive, onSelect }: Instance
 
           // 记录映射关系
           taskIds.forEach((maaTaskId, index) => {
-            if (enabledTasks[index]) {
-              registerMaaTaskMapping(instanceId, maaTaskId, enabledTasks[index].id);
+            if (expandedTasks[index]) {
+              registerMaaTaskMapping(instanceId, maaTaskId, expandedTasks[index].id);
               // MXU 特殊任务的 label 需要用 t() 翻译
-              const specialTask = getMxuSpecialTask(enabledTasks[index].taskName);
+              const specialTask = getMxuSpecialTask(expandedTasks[index].taskName);
               const taskDef =
                 specialTask?.taskDef ||
-                projectInterface?.task.find((t) => t.name === enabledTasks[index].taskName);
+                projectInterface?.task.find((t) => t.name === expandedTasks[index].taskName);
               const taskDisplayName =
-                enabledTasks[index].customName ||
+                expandedTasks[index].customName ||
                 (specialTask && taskDef?.label
                   ? t(taskDef.label)
                   : resolveI18nText(taskDef?.label, translations)) ||
-                enabledTasks[index].taskName;
+                expandedTasks[index].taskName;
               registerTaskIdName(maaTaskId, taskDisplayName);
             }
           });
+
+          // 注册延迟迭代
+          clearDeferredIterations();
+          for (const d of deferredEntries) {
+            const maaTaskId = taskIds[d.index];
+            if (maaTaskId !== undefined) {
+              registerDeferredIteration(maaTaskId, { entry: d.entry, pipelineOverride: d.pipelineOverride, selectedTaskId: d.selectedTaskId, displayName: d.displayName, remaining: d.remaining, delayMs: d.delayMs });
+            }
+          }
 
           // 设置任务队列
           setPendingTaskIds(instanceId, taskIds);

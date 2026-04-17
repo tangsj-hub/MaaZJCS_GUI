@@ -654,6 +654,38 @@ export const useAppStore = create<AppState>()(
         ),
       })),
 
+    setTaskLoopCount: (instanceId, taskId, count) => {
+      const clamped = Math.max(1, Math.min(Math.round(count), 999));
+      set((state) => ({
+        instances: state.instances.map((i) =>
+          i.id === instanceId
+            ? {
+                ...i,
+                selectedTasks: i.selectedTasks.map((t) =>
+                  t.id === taskId ? { ...t, loopCount: clamped <= 1 ? undefined : clamped } : t,
+                ),
+              }
+            : i,
+        ),
+      }));
+    },
+
+    setTaskLoopDelay: (instanceId, taskId, delay) => {
+      const clamped = Math.max(0, Math.min(Math.round(delay), 600000));
+      set((state) => ({
+        instances: state.instances.map((i) =>
+          i.id === instanceId
+            ? {
+                ...i,
+                selectedTasks: i.selectedTasks.map((t) =>
+                  t.id === taskId ? { ...t, loopDelay: clamped <= 0 ? undefined : clamped } : t,
+                ),
+              }
+            : i,
+        ),
+      }));
+    },
+
     // 复制任务
     duplicateTask: (instanceId, taskId) => {
       const state = get();
